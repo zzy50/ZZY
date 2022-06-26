@@ -1,0 +1,12 @@
+classes= 80
+train=data/coco/trainvalno5k.txt
+valid=data/coco/5k.txt
+names=data/coco.names
+backup=backup/
+eval=coco
+
+# trainvalno5k.txt : train 및 valid에 사용할 jpg파일의 경로 목록
+# 5k.txt : test에 사용할 jpg파일의 경로 목록
+# names : coco데이터셋의 label 목록 (person, bicycle, car, motorbike 등 총 80개)
+# backup=backup/ : ???
+# eval=coco : coco데이터셋에서 규정한 "IOU [.5 ~ .95]에 대한 mAP를 모두 구한 후 평균내는 평가지표"를 사용하겠다는 의미. 실제 코드에는 사용되지 않은 것 같음. 
