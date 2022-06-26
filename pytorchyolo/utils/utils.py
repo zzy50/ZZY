@@ -302,7 +302,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     t = time.time()
     output = [torch.zeros((0, 6), device="cpu")] * prediction.shape[0]
 
-    # prediction의 shape는 (bs, 10647, 85)이다(bs: 배치사이즈, 10647(=3*13^2 + 3*26^2 + 3*52^2: 예측된 박스 개수)
+    # prediction의 shape : (bs, 10647, 85) (bs: 배치사이즈, 10647(=3*13^2 + 3*26^2 + 3*52^2: 예측된 박스 개수)
     # 각각의 이미지에 대해 nms를 수행하기 위해 for문을 돌린다. bs = 32라면 반복 횟수가 32번이다.
     for xi, x in enumerate(prediction):
         '''

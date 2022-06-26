@@ -40,7 +40,7 @@ def create_modules(module_defs):
     module_list = nn.ModuleList()
     for module_i, module_def in enumerate(module_defs): # 한 번 돌때마다 레이어 하나씩 생성
         modules = nn.Sequential()
-
+        
         if module_def["type"] == "convolutional":
             bn = int(module_def["batch_normalize"]) # 0
             filters = int(module_def["filters"])
@@ -168,15 +168,14 @@ class YOLOLayer(nn.Module):
         self.stride = None
         '''
         해당 YOLOLayer가 13,26,52 중 52크기의 피쳐맵을 형성한다 가정하면
-        
         anchor_grid
-        [[[[[116., 90.]]],
+        [[[[[10, 13]]],
 
 
-          [[[156., 198.]]],
+          [[[16, 30]]],
 
 
-          [[[373., 326.]]]]]
+          [[[33, 23]]]]]
           
         anchor_grid.shape
         (1, -1, 1, 1, 2)
