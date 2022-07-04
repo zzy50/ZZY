@@ -5,7 +5,7 @@ def parse_model_config(path):
     path : [workspace]/config/coco.data  # 모델의 구조와 하이퍼파라미터를 담은 cfg파일
     
     '''
-    file = open(path, 'r')
+    file = open(path, 'r', encoding="UTF-8")
     lines = file.read().split('\n')
     lines = [x for x in lines if x and not x.startswith('#')]
     lines = [x.rstrip().lstrip() for x in lines] 
@@ -31,7 +31,7 @@ def parse_data_config(path):
     '''
     options = dict()
     options['num_workers'] = '2'
-    with open(path, 'r') as fp:
+    with open(path, 'r', encoding="UTF-8") as fp:
         lines = fp.readlines()
     for line in lines:
         line = line.strip()

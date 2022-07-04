@@ -42,7 +42,8 @@ def create_modules(module_defs):
         modules = nn.Sequential()
         
         if module_def["type"] == "convolutional":
-            bn = int(module_def["batch_normalize"]) # 0
+
+            bn = int(module_def["batch_normalize"])
             filters = int(module_def["filters"])
             kernel_size = int(module_def["size"])
             pad = (kernel_size - 1) // 2
@@ -197,24 +198,26 @@ class YOLOLayer(nn.Module):
         '''
         
         x = x.view(bs, self.num_anchors, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous() # contiguous : https://f-future.tistory.com/entry/Pytorch-Contiguous
-        # (bs,3,85,52,52) ==> (bs,3,52,52,85)
-        if not self.training: # 추론일 경우 
+        # (bs, 255, 52, 52) ==> (bs, 3, 85, 52, 52) ==> (bs, 3, 52, 52, 85)
+        if not self.training: # 추론일 경우
             if self.grid.shape[2:4] != x.shape[2:4]: # 현재 grid size가 52가 아니라면
                 self.grid = self._make_grid(nx, ny).to(x.device) # grid size를 52로 만듦
                 # grid.shape : (1, 1, 52, 52, 2)
                 # grid의 마지막 차원 크기가 2인 이유? : 52 * 52 grid의 모든 칸에 (x, y)좌표를 표현해야 하므로
 
             # x[..., 0:2], x[..., 2:4], x[..., 4:]를 학습시킴. [  (x,y), (w,h), (class score *80)  ]
-            x[..., 0:2] = (x[..., 0:2].sigmoid() + self.grid) * stride # [b_x = σ(t_x) + c_x]    
+            x[..., 0:2] = (x[..., 0:2].sigmoid() + self.grid) * stride # [b_x = σ(t_x) + c_x]
             # x[..., 0:2].sigmoid()의 요소값은 0~1범위의 sigmoid값이고 self.grid의 요소값은 0~51범위의 값이므로 stride를 곱하지 않으면 백년만년 x, y 좌표값이 0~51에 머무름. stride를 곱해줘야 이미지 전체를 아우를 수 있게 됨
             
-            x[..., 2:4] = torch.exp(x[..., 2:4]) * self.anchor_grid # [b_w = p_w * e^t_w]    
+            x[..., 2:4] = torch.exp(x[..., 2:4]) * self.anchor_grid # [b_w = p_w * e^t_w]
             # self.anchor_grid? : register_buffer의 anchor_grid가 이거인듯
             
             x[..., 4:] = x[..., 4:].sigmoid() # Pr(object) ∗ IOU(b, object) = σ(to)
-            x = x.view(bs, -1, self.no) # (bs, 8112, 85) 
+            x = x.view(bs, -1, self.no) # (bs, 8112, 85)
             # 8112 : (52^2)*3
 
+        # training=True일 때의 x.shape : (bs, 3, 52, 52, 85)
+        # training=False일 때의 x.shape : (bs, 8112, 85)
         return x
 
     @staticmethod
@@ -235,13 +238,13 @@ class Darknet(nn.Module):
         self.header_info = np.array([0, 0, 0, self.seen, 0], dtype=np.int32)
 
     def forward(self, x):
-        img_size = x.size(2) 
+        img_size = x.size(2)
         # x.shape의 axis=2의 크기를 반환함. (-1, 3, 416, 416)라면 416을 반환하는 것
         # 이 부분을 넣은 이유는 multi-scale training으로 input 이미지의 크기를 다양하게 줬기 때문
         # multi-scale training이 가능한 이유 : 네트워크의 구조가 FC(fully connected layer)를 사용하지 않는 FCN(fully convolutional netork)인 덕분
         layer_outputs, yolo_outputs = [], [] # layer_outputs 각 layer에서 도출한 피쳐맵을 저장
         for i, (module_def, module) in enumerate(zip(self.module_defs, self.module_list)):
-            if module_def["type"] in ["convolutional", "upsample", "maxpool"]: 
+            if module_def["type"] in ["convolutional", "upsample", "maxpool"]:
                 x = module(x)
             elif module_def["type"] == "route": 
                 # layers 속성의 값이 두 개일 경우 상위 레이어의 피쳐맵을 하위 피쳐맵에 channel을 기준으로 concatenate(dim=1)하는 passthrough layer
@@ -268,7 +271,7 @@ class Darknet(nn.Module):
         # Darknet의 부모 클래스인 nn.Module은 self.training=True가 default이며, model.eval()일 경우 자동으로 self.training=False로 변경됨
         # torch.cat(yolo_outputs, 1) : 각각 13, 26, 52사이즈의 피쳐맵에서 예측된 b_box를 합쳐서 (bs, 10647, 85)의 predict shape를 형성
         # yolo_outputs : train일 경우 loss를 계산하기 위해서 각각 13, 26, 52사이즈의 피쳐맵에서 예측된 b_box를 리스트에 담은 형태를 유지한 채로 predict 결과를 내보냄
-        
+
     def load_darknet_weights(self, weights_path):
         """Parses and loads the weights stored in 'weights_path'"""
 
