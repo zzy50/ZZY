@@ -156,63 +156,63 @@ class ListDataset(Dataset):
 
 # ==========================================================================================
 
-from pytorchyolo.utils.transforms import AUGMENTATION_TRANSFORMS
-from torch.utils.data import DataLoader
-from pytorchyolo.models import load_model
-from pytorchyolo.utils.utils import load_classes
-from pytorchyolo.utils.parse_config import parse_data_config
-from easydict import EasyDict
+# from pytorchyolo.utils.transforms import AUGMENTATION_TRANSFORMS
+# from torch.utils.data import DataLoader
+# from pytorchyolo.models import load_model
+# from pytorchyolo.utils.utils import load_classes
+# from pytorchyolo.utils.parse_config import parse_data_config
+# from easydict import EasyDict
 
-def _create_data_loader(img_path, batch_size, img_size, n_cpu, multiscale_training=False):
+# def _create_data_loader(img_path, batch_size, img_size, n_cpu, multiscale_training=False):
 
-    dataset = ListDataset(
-        img_path,
-        img_size=img_size,
-        multiscale=multiscale_training,
-        transform=AUGMENTATION_TRANSFORMS)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=n_cpu,
-        pin_memory=True,
-        collate_fn=dataset.collate_fn)
-    return dataloader
+#     dataset = ListDataset(
+#         img_path,
+#         img_size=img_size,
+#         multiscale=multiscale_training,
+#         transform=AUGMENTATION_TRANSFORMS)
+#     dataloader = DataLoader(
+#         dataset,
+#         batch_size=batch_size,
+#         shuffle=True,
+#         num_workers=n_cpu,
+#         pin_memory=True,
+#         collate_fn=dataset.collate_fn)
+#     return dataloader
 
-def run():
-    print('start!!!!!!!!!')
-    args = EasyDict({'model':'config/yolov3.cfg',
-                    'data':'config/coco.data',
-                    'epochs':300,
-                    'verbose':True,
-                    'n_cpu':8,
-                    'pretrained_weights':'weights/darknet53.conv.74',
-                    'checkpoint_interval':1,
-                    'evaluation_interval':1,
-                    'multiscale_training':True,
-                    'iou_thres':0.5,
-                    'conf_thres':0.1,
-                    'nms_thres':0.5,
-                    'logdir':'logs'
-                })
+# def run():
+#     print('start!!!!!!!!!')
+#     args = EasyDict({'model':'config/yolov3.cfg',
+#                     'data':'config/coco.data',
+#                     'epochs':300,
+#                     'verbose':True,
+#                     'n_cpu':8,
+#                     'pretrained_weights':'weights/darknet53.conv.74',
+#                     'checkpoint_interval':1,
+#                     'evaluation_interval':1,
+#                     'multiscale_training':True,
+#                     'iou_thres':0.5,
+#                     'conf_thres':0.1,
+#                     'nms_thres':0.5,
+#                     'logdir':'logs'
+#                 })
 
-    data_config = parse_data_config(args.data)
-    train_path = data_config["train"]
-    valid_path = data_config["valid"]
-    class_names = load_classes(data_config["names"])
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_model(args.model, args.pretrained_weights)
-    mini_batch_size = model.hyperparams['batch'] // model.hyperparams['subdivisions']
+#     data_config = parse_data_config(args.data)
+#     train_path = data_config["train"]
+#     valid_path = data_config["valid"]
+#     class_names = load_classes(data_config["names"])
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model = load_model(args.model, args.pretrained_weights)
+#     mini_batch_size = model.hyperparams['batch'] // model.hyperparams['subdivisions']
 
-    dataloader = _create_data_loader(
-        train_path,
-        mini_batch_size,
-        model.hyperparams['height'],
-        args.n_cpu,
-        args.multiscale_training)
+#     dataloader = _create_data_loader(
+#         train_path,
+#         mini_batch_size,
+#         model.hyperparams['height'],
+#         args.n_cpu,
+#         args.multiscale_training)
 
-    for _, imgs, targets in dataloader:
-        print(targets.shape)
+#     for _, imgs, targets in dataloader:
+#         print(targets.shape)
 
-if __name__ == '__main__':
-    run()
+# if __name__ == '__main__':
+#     run()

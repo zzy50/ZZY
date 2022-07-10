@@ -278,10 +278,80 @@ def box_iou(box1, box2):
     # iou = inter / (area1 + area2 - inter)
     return inter / (area1[:, None] + area2 - inter)
 
+def soft_nms_pytorch(dets, box_scores, sigma=0.6, thresh=0.4, cuda=0):
+    """
+    # Augments
+        dets:        박스 좌표를 나타내는 2차원 tensor ([[y1, x1, y2, x2],[y1, x1, y2, x2],....])
+        box_scores:  각 box의 confidence score (obj conf * cls conf)
+        sigma:       높을수록 suppression기준이 완화됨 
+        thresh:      낮을수록 suppression기준이 완화됨
+        cuda:        1이면 cuda, 0이면 cpu
+    # Return
+        최종 선택된 b_box들의 인덱스를 반환
+    """
 
-def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None):
+    # 각 box에 index를 매긴 후 axis=1의 맨 뒤에 concatenate
+    # b_box들의 index가 nms과정을 거친 후 이리저리 바뀌기 때문에 nms적용 전의 초기 index를 b_box좌표와 함께 저장해두기 위함
+    N = dets.shape[0]
+    if cuda:
+        indexes = torch.arange(0, N, dtype=torch.float).cuda().view(N, 1)
+    else:
+        indexes = torch.arange(0, N, dtype=torch.float).view(N, 1)
+    dets = torch.cat((dets, indexes), dim=1)
+
+    # 면적 계산을 위해 y1, x1, y2, x2 각각의 값을 변수로 선언
+    x1 = dets[:, 0]
+    y1 = dets[:, 1]
+    x2 = dets[:, 2]
+    y2 = dets[:, 3]
+    scores = box_scores
+    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
+
+    for i in range(N):
+        #  max_score가 t_score보다 큰 경우 (= 현재(i)박스보다 다른 박스의 conf가 더 높은 경우) 위치를 서로 바꿈
+        t_score = scores[i].clone()
+        other = i + 1
+
+        if i != N - 1: # i == N-1이면 max_other가 존재하지 않으므로 조건문이 필요
+            max_score, max_other = torch.max(scores[other:], dim=0)
+            if t_score < max_score: 
+                dets[i], dets[max_other.item() + i + 1] = dets[max_other.item() + i + 1].clone(), dets[i].clone()
+                scores[i], scores[max_other.item() + i + 1] = scores[max_other.item() + i + 1].clone(), scores[i].clone()
+                areas[i], areas[max_other + i + 1] = areas[max_other + i + 1].clone(), areas[i].clone()
+
+        # IoU를 계산하기 위해 intersection의 좌표 (yy1, xx1, yy2, xx2)를 구함
+        xx1 = np.maximum(dets[i, 0].to("cpu").numpy(), dets[other:, 0].to("cpu").numpy())
+        yy1 = np.maximum(dets[i, 1].to("cpu").numpy(), dets[other:, 1].to("cpu").numpy())
+        xx2 = np.minimum(dets[i, 2].to("cpu").numpy(), dets[other:, 2].to("cpu").numpy())
+        yy2 = np.minimum(dets[i, 3].to("cpu").numpy(), dets[other:, 3].to("cpu").numpy())
+        
+        w = np.maximum(0.0, yy2 - yy1 + 1)
+        h = np.maximum(0.0, xx2 - xx1 + 1)
+        inter = torch.tensor(w * h).cuda() if cuda else torch.tensor(w * h) # intersection의 넓이
+        ovr = torch.div(inter, (areas[i] + areas[other:] - inter)) # IOU(intersection over union)
+
+    #     # exponential decay를 통해 각 b_box score에 가중치를 곱해주는 과정 (시그마가 클 수록 weight가 커짐 --> suppression기준이 완화됨)
+    #     weight = torch.exp(-(ovr * ovr) / sigma) # weight < 1, max_score b_box와의 IOU(=ovr)가 높을 수록 exponential 값이 낮아짐
+    #     scores[other:] = weight * scores[other:] # IOU가 일정 이상이면 아예 삭제해버리는 초기 nms와 다르게 weight를 곱해줘서 연속적인 scoring을 수행 
+
+    # # nms결과가 thresh보다 큰 박스의 인덱스를 keep로 선언
+    # # 초기 nms의 nms_thres와 여기서 사용한 thresh의 기준이 달라서 헷갈리지 않도록 유의 (전자는 높을수록 suppression기준이 완화되고 후자는 낮을수록 suppression기준이 완화됨)
+    # sigma : 높을수록 suppression 기준이 완화됨
+    # keep = dets[:, 4][scores > thresh].int()
+        # exponential decay
+        weight = torch.exp(-(ovr * ovr) / sigma) # weight < 1 
+        scores[other:] = weight * scores[other:] 
+
+    # nms로 최종 선택된 b_box의 초기 인덱스를 keep로 선언
+    keep = dets[:, 4][scores > thresh].long()
+
+    return keep
+
+
+def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, soft_nms=True, sigma=0.6, thresh=0.4):
     """
     예측된 b_box들에 대하여 NMS 수행
+    prediction.shape : (bs, 8112, 85)
     conf_thres : class n에 대한 confidence score (ground truth에 대한 IOU * class에 대한 softmax score)
     nms_thres
     
@@ -298,6 +368,19 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     max_nms = 30000  # nms에 넣을 최대 box 개수 (max_nms = 30000이라면 obj conf가 높은 순대로 30000개만 슬라이싱) (maximum number of boxes into torchvision.ops.nms())
     time_limit = 1.0  # nms 최대 수행 시간 (nms process에 time_limit이상의 시간이 소요되면 for문을 탈출)
     multi_label = nc > 1  # multiple labels per box (adds 0.5ms/img)
+    '''
+    이미지 하나당 box의 최대 개수는 10647개인데 어째서 max_nms=30000이라는 수치가 가능한가?
+
+    [x1, y1, x2, y2, obj_conf, conf(class14), conf(class31), conf(class59)]
+    위와 같은 형태를
+
+    [[x1, y1, x2, y2, conf, 14],
+     [x1, y1, x2, y2, conf, 31],
+     [x1, y1, x2, y2, conf, 59]]
+    이렇게 바꿈으로써 box 좌표 한 개에 대한 정보가 conf_thres보다 높은 클래스 개수 만큼 중복되어 존재하게 되어 
+    이미지 내의 객체가 많을 경우 30000개를 가볍게 넘는 경우가 생길 수 있다.
+    여담으로 이렇게 class 하나당 box하나를 차지하게 됨으로서 클래스별로 AP를 계산하여 mAP를 얻거나 지정한 class만을 따로 검출하는 것이 가능해진다.
+    '''
 
     t = time.time()
     output = [torch.zeros((0, 6), device="cpu")] * prediction.shape[0]
@@ -306,12 +389,12 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     # 각각의 이미지에 대해 nms를 수행하기 위해 for문을 돌린다. bs = 32라면 반복 횟수가 32번이다.
     for xi, x in enumerate(prediction):
         '''
-        x[..., 4] : 예측된 b_box들의 objectiveness confidence
-        x[..., 5] : 예측된 b_box들의 class1 confidence
+        x[..., 4] : 예측된 b_box들의 objectness confidence
+        x[..., 5] : 예측된 b_box들의 class0 confidence
         ~~~~ 
-        x[..., 84] : 예측된 b_box들의 class80 confidence
+        x[..., 84] : 예측된 b_box들의 class79 confidence
         '''
-        x = x[x[..., 4] > conf_thres] # objective confidence가 conf_thres이상인 x만 추출
+        x = x[x[..., 4] > conf_thres] # objectness confidence가 conf_thres이상인 x만 추출
         
         # x.shape[0]가 0일 경우 (= obj conf가 conf_thres이상인 box가 없을 경우)
         if not x.shape[0]:
@@ -325,11 +408,36 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
         # Detections matrix nx6 (x1, y1, x2, y2, conf, cls)
         if multi_label: # class가 두 개 이상이면 
+            # conf가 conf_thres보다 큰 인덱스만 반환
+            # i : conf가 conf_thres보다 큰 box의 인덱스
+            # j : 각 box 별 conf_thres보다 큰 conf의 인덱스 (class0이면 j=0)
             i, j = (x[:, 5:] > conf_thres).nonzero(as_tuple=False).T # nonzero는 0이 아닌 원소들의 인덱스를 반환한다. 
-            # cls_conf가 conf_thres보다 큰 인덱스만 반환
-            # i : box의 인덱스
-            # j : 각 box 별 conf_thres보다 큰 cls_conf의 인덱스
             x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
+            '''        
+            의의 : 하나의 box에 conf가 conf_thres보다 큰 클래스가 2개 이상일 경우 
+            [x1, y1, x2, y2, obj_conf, conf(class14), conf(class31), conf(class59)]의 형태를
+            [[x1, y1, x2, y2, conf, 14],
+             [x1, y1, x2, y2, conf, 31],
+             [x1, y1, x2, y2, conf, 59]]
+            의 형태로 변형함. (기존에 index 4에 위치하던 obj_conf는 위에서 이미 cls_conf에 곱해서 conf를 형성함으로써 제 역할을 다했으므로 삭제함)
+            
+            즉 box 한 개의 좌표가 conf_thres보다 큰 conf를 가진 클래스 개수만큼 axis=1 방향으로 중복되어 표현된다.
+            위의 예시에선 class14, class31, class59가 선택되었으므로 세 번 중복된다.
+            
+            [box0_x1, box0_y1, box0_x2, box0_y2, obj_conf, conf(class14), conf(class31), conf(class59)]
+            [box1_x1, box1_y1, box1_x2, box1_y2, obj_conf, conf(class11), conf(class25), conf(class47), conf(class74), conf(class76)] 
+            만약 box가 두 개 있을 때 각 box에 conf_thres를 적용한 결과가 위와 같다 가정하면
+            
+            [[box0_x1, box0_y1, box0_x2, box0_y2, conf, 14],
+             [box0_x1, box0_y1, box0_x2, box0_y2, conf, 31],
+             [box0_x1, box0_y1, box0_x2, box0_y2, conf, 59],
+             [box1_x1, box1_y1, box1_x2, box1_y2, conf, 11],
+             [box1_x1, box1_y1, box1_x2, box1_y2, conf, 25],
+             [box1_x1, box1_y1, box1_x2, box1_y2, conf, 47],
+             [box1_x1, box1_y1, box1_x2, box1_y2, conf, 74],
+             [box1_x1, box1_y1, box1_x2, box1_y2, conf, 76]]      
+            이렇게 각각 세 번, 다섯 번씩 중복된다.
+            '''
         else:  # best class only
             conf, j = x[:, 5:].max(1, keepdim=True)
             x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
@@ -343,20 +451,25 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         if not n:  # no boxes
             continue
         elif n > max_nms:  # excess boxes
-            # obj conf를 내림차순으로 정렬 후 max_nms만큼만 뽑아내고 나머지는 버림
+            # conf를 내림차순으로 정렬 후 max_nms만큼만 뽑아내고 나머지는 버림
             x = x[x[:, 4].argsort(descending=True)[:max_nms]] 
-
-        # Batched NMS
-        c = x[:, 5:6] * max_wh  # classes
-        '''
-        c를 각 box의 모든 좌표에 더해주는 이유
-        다양한 class의 box가 들어왔을때 이를 구분하기 위해 c를 더해 다른 class간 box들의 좌표계를 다르게 해서 torchvision.nms()함수가 다른 class의 box로 인식해서 살려두게 하기 위함이다.
-        ( = torchvision.ops.nms()가 box의 class를 구분하지 못하기 때문)
-        '''
-        # boxes (offset by class)
-        # scores : obj conf
-        boxes, scores = x[:, :4] + c, x[:, 4]
-        i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+        
+        if soft_nms:
+            boxes, scores = x[:, :4] + c, x[:, 4]
+            i = soft_nms_pytorch(boxes, scores, sigma=sigma, thresh=thresh, cuda=1)
+        else:
+            # Batched NMS
+            c = x[:, 5:6] * max_wh  # classes
+            '''
+            c를 각 box의 모든 좌표에 더해주는 이유
+            다양한 class의 box가 들어왔을때 이를 구분하기 위해 c를 더해 다른 class간 box들의 좌표계를 다르게 해서 torchvision.nms()함수가 다른 class의 box로 인식해서 살려두게 하기 위함이다.
+            ( = torchvision.ops.nms()가 box의 class를 구분하지 못하기 때문)
+            '''
+            # boxes (offset by class)
+            # scores : obj conf
+            boxes, scores = x[:, :4] + c, x[:, 4]
+            i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+        
         if i.shape[0] > max_det:  # limit detections
             i = i[:max_det]
 

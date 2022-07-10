@@ -2,7 +2,7 @@ import time
 import numpy as np
 import torch
 
-def soft_nms_pytorch(dets, box_scores, sigma=0.5, thresh=0.001, cuda=0):
+def soft_nms_pytorch(dets, box_scores, sigma=0.6, thresh=0.4, cuda=0):
     """
     # Augments
         dets:        박스 좌표를 나타내는 2차원 tensor ([[y1, x1, y2, x2],[y1, x1, y2, x2],....])
@@ -66,7 +66,7 @@ def soft_nms_pytorch(dets, box_scores, sigma=0.5, thresh=0.001, cuda=0):
         scores[other:] = weight * scores[other:] 
 
     # nms로 최종 선택된 b_box의 초기 인덱스를 keep로 선언
-    keep = dets[:, 4][scores > thresh].int()
+    keep = dets[:, 4][scores > thresh].long()
 
     return keep
 
