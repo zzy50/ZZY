@@ -205,9 +205,9 @@ class YOLOLayer(nn.Module):
                 # grid.shape : (1, 1, 52, 52, 2)
                 # grid의 마지막 차원 크기가 2인 이유? : 52 * 52 grid의 모든 칸에 (x, y)좌표를 표현해야 하므로
 
-            # x[..., 0:2], x[..., 2:4], x[..., 4:]를 학습시킴. [  (x,y), (w,h), (class score *80)  ]
             x[..., 0:2] = (x[..., 0:2].sigmoid() + self.grid) * stride # [b_x = σ(t_x) + c_x]
-            # x[..., 0:2].sigmoid()의 요소값은 0~1범위의 sigmoid값이고 self.grid의 요소값은 0~51범위의 값이므로 stride를 곱하지 않으면 백년만년 x, y 좌표값이 0~51에 머무름. stride를 곱해줘야 이미지 전체를 아우를 수 있게 됨
+            # x[..., 0:2].sigmoid()의 요소값은 0~1범위의 sigmoid값이고 self.grid의 요소값은 0~51범위의 값이므로 
+            # stride를 곱하지 않으면 백년만년 x, y 좌표값이 0~51에 머무름. stride를 곱해줘야 input 이미지 전체를 아우를 수 있게 됨
             
             x[..., 2:4] = torch.exp(x[..., 2:4]) * self.anchor_grid # [b_w = p_w * e^t_w]
             # self.anchor_grid? : register_buffer의 anchor_grid가 이거인듯
