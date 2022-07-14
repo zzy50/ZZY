@@ -1,4 +1,7 @@
 import math
+import numpy as np
+from easydict import EasyDict
+
 
 import torch
 import torch.nn as nn
@@ -432,3 +435,102 @@ def build_targets(p, targets, model):
 
     # (class), (x, y, w, h), (img_id, 앵커 id, grid id_y, grid id_x), (앵커박스 초기 w, h)
     return tcls, tbox, indices, anch
+
+
+
+# def run():
+'''
+type(p) : list
+len(p) : 3
+    p[0].shape : (bs, 3, 13, 13, 85)
+    p[1].shape : (bs, 3, 26, 26, 85)
+    p[2].shape : (bs, 3, 52, 52, 85)
+targets example:
+    (# 이 예시는 batch_size=1, 다시 말해 targets에 하나의 이미지에 대한 target 정보만 들어올 경우를 가정하여 작성함. 따라서 예시의 img_id의 값은 모두 같다.)
+    (# batch_size=32일 경우 차원은 달라지지 않지만 torch.tensor.cat([img1, img2, img3, ..., img32], axis=1)의 형태로 concatenate되어 표현되므로 행의 개수가 매우 많아지게 된다.)
+    img_id 45 0.479492 0.688771 0.955609 0.595500 
+    img_id 45 0.736516 0.247188 0.498875 0.476417 
+    img_id 50 0.637063 0.732938 0.494125 0.510583 
+    img_id 45 0.339438 0.418896 0.678875 0.781500 
+    img_id 49 0.646836 0.132552 0.118047 0.096937 
+    img_id 49 0.773148 0.129802 0.090734 0.097229 
+    img_id 49 0.668297 0.226906 0.131281 0.146896 
+    img_id 49 0.642859 0.079219 0.148063 0.148062
+# img_id : 한 batch내에서의 id이다. batch_size=32라면 0~31 사이의 값이 된다.
+
+targets.shape : (n_object, 6) 
+# n_object : 한 이미지 내에 존재하는 객체의 수
+# 6 : img_id, class, x, y, w, h 
+'''
+
+'''
+yolo_layer.anchors : 각 yolo_layer에서 사용하는 앵커박스의 크기 
+    13*13 : [(116,90),  (156,198),  (373,326)]
+    26*26 : [(30,61),  (62,45),  (59,119)]
+    52*52 : [(10,13),  (16,30),  (33,23)]
+yolo_layer.stride : 각 yolo_layer를 통과했던 이미지의 크기를 13 or 26 or 52로 나눈 몫
+    '''
+
+p = []
+p.append(torch.randn(1, 3, 13, 13, 85))
+p.append(torch.randn(1, 3, 26, 26, 85))
+p.append(torch.randn(1, 3, 52, 52, 85))
+
+targets = torch.tensor(
+    [[0, 45, 0.479492, 0.688771, 0.955609, 0.595500], 
+     [0, 45, 0.736516, 0.247188, 0.498875, 0.476417], 
+     [0, 50, 0.637063, 0.732938, 0.494125, 0.510583], 
+     [0, 45, 0.339438, 0.418896, 0.678875, 0.781500], 
+     [0, 49, 0.646836, 0.132552, 0.118047, 0.096937], 
+     [0, 49, 0.773148, 0.129802, 0.090734, 0.097229], 
+     [0, 49, 0.668297, 0.226906, 0.131281, 0.146896], 
+     [0, 49, 0.642859, 0.079219, 0.148063, 0.148062]]
+)
+
+
+anchor_13 = torch.tensor(
+            [[116,90],  
+             [156,198],  
+             [373,326]]
+)
+
+anchor_26 = torch.tensor(
+            [[30,61],  
+             [62,45],  
+             [59,119]]
+)
+
+anchor_52 = torch.tensor(
+            [[10,13],  
+             [16,30],  
+             [33,23]]
+)
+
+
+yolo_13 = EasyDict(
+                {'anchors' : anchor_13, 
+                    'stride' : torch.tensor(416//13)},
+                )
+
+yolo_26 = EasyDict(
+                {'anchors' : anchor_26, 
+                    'stride' : torch.tensor(416//26)},
+                )
+
+yolo_52 = EasyDict(
+                {'anchors' : anchor_52, 
+                    'stride' : torch.tensor(416//52)}
+                )
+
+
+model = EasyDict(
+                {'yolo_layers':[yolo_13, yolo_26, yolo_52]}
+                )
+
+
+tcls, tbox, indices, anch = build_targets(p, targets, model)
+
+print('끝!!')
+
+# if __name__ == '__main__':
+#     run()
