@@ -348,7 +348,7 @@ def soft_nms_pytorch(dets, box_scores, sigma=0.6, thresh=0.4, cuda=0):
     return keep
 
 
-def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, soft_nms=True, sigma=0.6, thresh=0.4):
+def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, soft_nms=False, sigma=0.6, thresh=0.4):
     """
     예측된 b_box들에 대하여 NMS 수행
     prediction.shape : (bs, 8112, 85)

@@ -10,7 +10,6 @@ import torch.nn as nn
 
 
 def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-9):
-    # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
     box2 = box2.T
 
     # box정보가 (center_x, center_y, w, h)형태라면 (lt_x, lt_y, rb_x, rb_y)형태로 변환
@@ -61,7 +60,7 @@ def compute_loss(predictions, targets, model):
 
     device = targets.device
 
-    # 세 가지 loss에 대한 placeholder를 각각 지정     # placeholder : loss의 누적합을 어떤 변수에 담고 싶을 때 해당 변수의 초깃값을 0으로 설정하는 것
+    # 세 가지 loss에 대한 placeholder를 각각 지정     # placeholder : loss의 누적합을 어떤 변수에 담고 싶을 때 해당 변수의 초깃값을 0으로 설정함
     lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
 
 
@@ -85,19 +84,15 @@ def compute_loss(predictions, targets, model):
     for layer_index, layer_predictions in enumerate(predictions):
         # (img_id, 앵커 id(0~2), grid id_y, grid id_x)
         b, anchor, grid_j, grid_i = indices[layer_index]
-        # Build empty object target tensor with the same shape as the object prediction
+        # target placeholder 생성
         tobj = torch.zeros_like(layer_predictions[..., 0], device=device)  # target obj
-        # Get the number of targets for this layer.         
-        # Each target is a label box with some scaling and the association of an anchor box.
-        # Label boxes may be associated to 0 or multiple anchors. So they are multiple times or not at all in the targets.
         num_targets = b.shape[0]
         # num_targets=1 이상일 때 loss를 계산한다. (0은 False로 취급되어 if문을 통과하지 못한다.)
         if num_targets:
-            # Load the corresponding values from the predictions for each of the targets
             ps = layer_predictions[b, anchor, grid_j, grid_i]
 
             # box Regression
-            # 박스 중심좌표인 x, y에 대한 예측이 grid cell 밖에 형성되는 것을 막기위해 sigmoid로 scale
+            # 박스 중심좌표인 x, y에 대한 예측이 grid cell 밖에 형성되는 것을 막기위해 sigmoid로 scaling적용
             pxy = ps[:, :2].sigmoid()
             
             # Apply exponent to wh predictions and multiply with the anchor box that matched best with the label for each cell that has a target
@@ -115,7 +110,7 @@ def compute_loss(predictions, targets, model):
             lbox += (1.0 - iou).mean()  
 
             # Classification of the objectness
-            # Fill our empty object target tensor with the IoU we just calculated for each target at the targets position
+            # Line87에서 생성한 target placeholder에 target과 predict에 대한 IoU정보를 담음
             tobj[b, anchor, grid_j, grid_i] = iou.detach().clamp(0).type(tobj.dtype)  # Use cells with iou > 0 as object targets
 
             # Classification of the class
